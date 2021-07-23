@@ -401,4 +401,9 @@ tr {
   color: black;
 }
 
+#pages {
+  display: flex;
+  justify-content: flex-end;
+}
+
 /*# sourceMappingURL=style.css.map */
