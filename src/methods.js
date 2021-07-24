@@ -151,6 +151,7 @@ export default {
     });
     // 開始顯示第一頁資料
     page(pageBox[pageIndex]);
+    this.bind(options)
 
     // 開始第一筆 active
     $("#allPage li").eq(0).addClass("active");
@@ -180,6 +181,7 @@ export default {
     data.push(newItem);
     // 加入新值後重新渲染畫面
     this.perPage(data, options.perPage);
+    this.bind(options)
     if (options.showInfo)
       $(".dataTotalNum").html(
         "<div>" + "共" + data.length + "筆資料" + "</div>"

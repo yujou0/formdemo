@@ -1,13 +1,21 @@
-$(function () {
-  refetchTable(items);
-  $(".dataTotalNum").html("<div>" + "共" + items.length + "筆資料" + "</div>");
-  $("#add-btn").on("click", function (e) {
-    e.preventDefault();
-  });
-});
+// DEFAULT options
+const DEFAULT = {
+  // 表格內容資料
+  data: [],
+  // 是否顯示自訂筆數
+  showPerPage: true,
+  // 是否顯示搜尋輸入框
+  showSearch: true,
+  // 是否顯示總筆數資訊
+  showInfo: true,
+  // 是否顯示分頁導航
+  showPage: true,
+  // 初始分頁數
+  perPage: 5,
+};
 
 // User 欄位資料
-var items = [
+let items = [
   {
     id: 1,
     name: "George Maria Anderson",
@@ -184,383 +192,427 @@ var items = [
     date: "2021-03-03",
   },
 ];
+// 宣告origiItems和items原始值相同
+let origiItems = items;
+// 取得顯示資料筆數欄
+const ItemQuantity = document.getElementById("ItemQuantity");
+// 取得關鍵字欄
+const searchTxt = document.getElementById("searchTxt");
+// 宣告day是當下時間再加一天
+let currentDate = dayjs().add(1, "day").format("YYYY-MM-DD");
 
+const formName = document.getElementById("name");
+const formEmail = document.getElementById("email");
+const formPhone = document.getElementById("phone");
+
+// 宣告驗證規則
+let nameRule = /^.{1,}$/;
+let emailRule =
+  /^\w+((-\w+)|(\.\w+))*\@[A-Za-z0-9]+((\.|-)[A-Za-z0-9]+)*\.[A-Za-z]+$/;
+let phoneRule = /^09\d{2}-\d{6}$/;
 /**
- * 重新渲染 Table
- * @param {Array} feedbackData 欄位資料
- */
-function refetchTable(feedbackData = []) {
-  if (!(feedbackData && feedbackData.length)) return;
-
-  let $element = $("#userTable>tbody");
-
-  $element.empty();
-
-  $.each(feedbackData, function (key, item) {
-    var row = $("<tr></tr>");
-
-    row.append($('<td style="width:25%;"></td>').html(item.name));
-    row.append($('<td style="width:30%;"></td>').html(item.email));
-    row.append($('<td style="width:25%;"></td>').html(item.phone));
-    row.append($('<td style="width:15%;"></td>').html(item.date));
-
-    $element.append(row);
-  });
-  // showPages(feedbackData)
-}
-
-// 搜尋功能
-
-/**
- * 1. 關鍵字搜尋(Slow)
- * (1) for迴圈比對每個物件value
- * (2) 將每個物件轉為字串
- * (3) 利用ES6 set(集合)方法篩選唯一值
- *
+ * 顯示搜尋結果
  * @param {string} value
- * @param {object[]} _array
- * @return {object[]} 回傳符合搜尋結果的物件陣列
+ * @param {object[]} arr
  */
-function searchKeywords(value, _array = []) {
-  const matchsArray = [];
-  // 字串不限制大小寫與去除空白
-  const regexpResult = new RegExp($.trim(value), "ig");
+const showSearchResult = (value, arr = []) => {
+  // 使用 new 關鍵字實體化類別搜尋後的result
+  const showResult = new TableCRUD($("#userTable>tbody"), value, arr);
+  $("#jsonResult")
+    .empty()
+    .html(`<pre>${JSON.stringify(showResult.filterKeywords(), null, 1)}</pre>`);
+};
 
-  // 遍歷陣列中的object
-  for (let i = 0; i < _array.length; i++) {
-    for (key in _array[i]) {
-      // 組合一個新字串
-      const scanValue = Object.keys(_array[i]).reduce((res, key) => {
-        // 排除id欄位篩選
-        return key !== "id" ? res + _array[i][key] : res;
-      }, "");
-
-      // 比對正則條件字串
-      if (scanValue.match(regexpResult)) matchsArray.push(_array[i]);
-    }
+class TableCRUD {
+  // constructor(feedbackData = [], value, _array = [], dataLen) {
+  constructor(element, value, _array = [], options) {
+    this.element = element;
+    this.options = $.extend(true, {}, DEFAULT, options);
+    console.log(this.options);
+    this.data = DEFAULT.data;
+    this.feedbackData = this.options.data;
+    this.value = value;
+    this._array = _array;
+    this.dataLen = this.options.data;
+    this.showPerPage = this.options.showPerPage;
+    this.showSearch = this.options.showSearch;
+    this.showInfo = this.options.showInfo;
+    this.showPage = this.options.showPage;
+    this.perPage = this.options.perPage;
+    this.initTable();
+    this.saveData = [];
+  }
+  initTable(options = {}) {
+    if (!this.showPerPage) $("#ItemQuantityLabel").hide();
+    if (!this.showSearch) $("#searchTxtLabel").hide();
+    if (!this.showInfo) $("#dataTotalNum").hide();
+    if (!this.showPage) $("#pages").hide();
+    if (this.perPage !== 5) $("#ItemQuantity").val(this.perPage);
+    this.saveData = this.options.data;
   }
 
-  /* === 集合方法篩選唯一值 === */
-  const _set = new Set();
-  const result = matchsArray.filter((item) =>
-    !_set.has(JSON.stringify(item)) ? _set.add(JSON.stringify(item)) : false
-  );
+  //#region METHODS
+  /**
+   * 重新渲染 Table
+   * @param {Array} feedbackData 欄位資料
+   */
+  refetchTable() {
+    const { element } = this;
 
-  // const result = [
-  //   ...new Set(matchsArray.map((item) => JSON.stringify(item)))
-  // ].map((item) => JSON.parse(item));
-
-  const newRes = !result ? [] : result;
-
-  refetchTable(newRes);
-
-  // 依搜尋後資料筆數重新分頁
-  showPages(newRes);
-
-  // 得到搜尋後資料筆數，渲染到頁面
-  $(".dataTotalNum").html("<div>" + "共" + newRes.length + "筆資料" + "</div>");
-  return newRes;
-}
-
-/**
- * 2. 關鍵字搜尋(Quick)
- * @param {string} value
- * @param {object[]} _array
- * @return {object[]} 回傳符合搜尋結果的物件陣列
- */
-function filterKeywords(value, _array = []) {
-  // 字串不限制大小寫與去除空白
-  const regexpResult = new RegExp($.trim(value), "ig");
-  // 篩選物件陣列
-  const result = _array.filter((obj) => {
-    // 組合一個新字串
-    const scanValue = Object.keys(obj).reduce((res, key) => {
-      // 排除id欄位
-      return key !== "id" ? res + obj[key] : res;
-    }, "");
-
-    // 比對正則條件字串
-    return scanValue.match(regexpResult);
-  });
-
-  refetchTable(result);
-  return result;
-}
-
-/**
- * 3. 關鍵字搜尋(Lodash)
- * @param {string} value
- * @param {object[]} _array
- * @return {object[]} 回傳符合搜尋結果的物件陣列
- */
-function lodashFilterKeywords(value, _array = []) {
-  // 篩選物件陣列
-  const result = _.filter(_array, function (obj) {
-    // 組合一個新字串
-    const scanValue = Object.keys(obj).reduce((res, key) => {
-      // 排除id欄位
-      return key !== "id" ? res + obj[key] : res;
-    }, "");
-
-    // 比對符合的字串, 不限制大小寫與去除空白
-    return _.includes(
-      _.lowerCase(_.trim(scanValue)),
-      _.lowerCase(_.trim(value))
+    $(element).empty();
+    refetchItems.showPages();
+    $(".dataTotalNum").html(
+      "<div>" + "共" + items.length + "筆資料" + "</div>"
     );
-  });
+    // 在#addDate中顯示當下時間
+    $("#addDate").html(`<div>` + currentDate + `</div>`);
 
-  refetchTable(result);
-  return result;
-}
+    if (!(this.feedbackData && this.feedbackData.length)) return;
 
-/**
- * 重新渲染 Table
- * @param {Array} feedbackData 欄位資料
- */
-// function init(){
-function refetchTable(feedbackData = []) {
-  let $element = $("#DataTable>tbody");
-  $element.empty();
-
-  if (feedbackData && feedbackData.length) {
-    $.each(feedbackData, function (key, item) {
+    $.each(this.feedbackData, function (key, item) {
       let row = $("<tr></tr>");
-
       row.append($('<td style="width:25%;"></td>').html(item.name));
       row.append($('<td style="width:30%;"></td>').html(item.email));
       row.append($('<td style="width:25%;"></td>').html(item.phone));
       row.append($('<td style="width:15%;"></td>').html(item.date));
-
-      $element.append(row);
+      row.append(
+        $(
+          `<td style="width:20%;" data-id="${item.id}"><a class="btn btn-success edit-btn">Edit</a> | <a class="btn btn-danger delete-btn">Delete</a></td>`
+        )
+      );
+      element.append(row);
     });
-  } else {
-    $element
-      .empty()
-      .html($("<tr></tr>").append('<td colspan="4">No Data.</td>'));
   }
+  // 打開修改彈窗
+  openEditDialog(items) {
+    const callModal = document.getElementById("addBtn");
+    callModal.click();
+
+    const addModalLabel = document.getElementById("addModalLabel");
+    addModalLabel.textContent = `編輯`;
+
+    formName.value = items.name;
+    formEmail.value = items.email;
+    formPhone.value = items.phone;
+    const addSubmit = document.getElementById("addSubmit");
+    const saveButton = document.createElement("button");
+    saveButton.classList.add("btn", "border-secondary");
+    saveButton.id = "saveButton";
+    saveButton.innerHTML = "更新";
+    addSubmit.parentNode.replaceChild(saveButton, addSubmit);
+    // saveButton.setAttribute("onclick", refetchItems.updateData(this.items));
+    console.log(items);
+    // $('#saveButton').bind('click',
+    // refetchItems.updateData(items)
+    //      );
+    saveButton.onclick = function () {
+      refetchItems.updateData(items);
+    };
+  }
+  // 更新單筆欄位資料
+  // edit 儲存用onclick="refetchItems.updateData(items[${item.id}])"
+
+  updateData(data = {}) {
+    var data =
+      arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
+
+    const _index = items.findIndex(
+      (item) => parseInt(item.id) === parseInt(data.id)
+    );
+
+    let nameResult = nameRule.test(formName.value);
+    let emailResult = emailRule.test(formEmail.value);
+    let phoneResult = phoneRule.test(formPhone.value);
+    // 驗證
+    if (!nameResult) $(".errorName").text("此欄位必填");
+    else $(".errorName").text("");
+    if (!emailResult) $(".errorEmail").text("email格式錯誤");
+    else $(".errorEmail").text("");
+    if (!phoneResult) $(".errorPhone").text("手機號碼格式錯誤");
+    else $(".errorPhone").text("");
+    console.log(_index, items);
+    // 如果驗證都通過，提交表單
+    if (nameResult && emailResult && phoneResult) {
+      items[_index].name = formName.value;
+      items[_index].email = formEmail.value;
+      items[_index].phone = formPhone.value;
+    }
+
+    // 更新資料
+    this.refetchTable(items);
+  }
+  // 刪除單筆欄位資料
+  removeDataByID(id) {
+    items.forEach(function (obj, i) {
+      if (true && parseInt(obj.id) === parseInt(id)) {
+        items.splice(i, 1);
+      }
+    });
+    // // 更新資料
+    this.refetchTable(items);
+  }
+  /**
+   * 表單驗證
+   */
+  validateForm() {
+    //表單提交
+    $("#addForm").on("submit", function (e) {
+      e.preventDefault();
+      $("#addForm").submit();
+    });
+
+    let nameValue = $("#name").val();
+    let emailValue = $("#email").val();
+    let phoneValue = $("#phone").val();
+
+    let nameResult = nameRule.test(nameValue);
+    let emailResult = emailRule.test(emailValue);
+    let phoneResult = phoneRule.test(phoneValue);
+
+    // 驗證
+    if (!nameResult) $(".errorName").text("此欄位必填");
+    else $(".errorName").text("");
+    if (!emailResult) $(".errorEmail").text("email格式錯誤");
+    else $(".errorEmail").text("");
+    if (!phoneResult) $(".errorPhone").text("手機號碼格式錯誤");
+    else $(".errorPhone").text("");
+
+    // 如果驗證都通過，提交表單
+    if (nameResult && emailResult && phoneResult) refetchItems.addItem();
+  }
+  /**
+   * 表單提交
+   */
+  addItem() {
+    // 宣告點擊儲存新增次數(從一開始的陣列繼續往後上數字)用來取id名稱
+    let count = items.length + 1;
+    let newItem = {
+      id: count,
+      name: $("#name").val(),
+      email: $("#email").val(),
+      phone: [$("#phone").val()],
+      date: currentDate,
+    };
+    count++;
+    $("#searchTxt").val("");
+    // 新值加入items
+    items = origiItems;
+    items.push(newItem);
+    // 加入新值後重新渲染畫面
+    refetchItems.refetchTable();
+    refetchItems.showPages();
+    $(".dataTotalNum").html(
+      "<div>" + "共" + items.length + "筆資料" + "</div>"
+    );
+    // 送出後欄位清空
+    $("#name,#email,#phone").val("");
+
+    return items[items.length - 1];
+  }
+  /**
+   * 關鍵字搜尋
+   * @param {string} value
+   * @param {object[]} _array
+   * @return {object[]} 回傳符合搜尋結果的物件陣列
+   */
+  filterKeywords() {
+    // 字串不限制大小寫與去除空白
+    const regexpResult = new RegExp($.trim(this.value), "ig");
+    // 篩選物件陣列
+    const result = this._array.filter((obj) => {
+      // 組合一個新字串
+      const scanValue = Object.keys(obj).reduce((res, key) => {
+        // 排除id欄位
+        return key !== "id" ? res + obj[key] : res;
+      }, "");
+      // 比對正則條件字串
+      return scanValue.match(regexpResult);
+    });
+    // 使用 new 關鍵字實體化類別搜尋後資料
+    const newResult = new TableCRUD($("#userTable>tbody"), result);
+    // 依搜尋後資料重新渲染表格
+    newResult.refetchTable();
+    items = result;
+    refetchItems.showPages();
+    $(".dataTotalNum").html(
+      "<div>" + "共" + result.length + "筆資料" + "</div>"
+    );
+
+    // 如果關鍵字欄是空的，把items的值改回一開始的值重新渲染畫面
+    if (!this.value) {
+      items = origiItems;
+      refetchItems.showPages();
+      refetchItems.refetchTable();
+      $(".dataTotalNum").html(
+        "<div>" + "共" + items.length + "筆資料" + "</div>"
+      );
+    }
+    return result;
+  }
+
+  /**
+   * 分頁功能
+   * @param {object[]} dataLen
+   */
+  showPages() {
+    // 每頁顯示幾筆資料
+    let pageCount = ItemQuantity.value;
+    //容器，總筆數切成好幾批存放，每批是一組陣列 1~10，11~20，21~30，31~40 ....
+    let pageBox = [];
+    // 第幾頁
+    let pageIndex = 1;
+    // 如果dataLen 是truthy，抓items的值
+    if (this.dataLen) this.dataLen = items;
+
+    let totalPage = Math.ceil(this.dataLen.length / pageCount);
+    $("#allPage").empty();
+
+    for (let i = 1; i <= totalPage; i++) {
+      // 將總筆數資料切成好幾批，使用二維陣列紀錄它，1~10，11~20，21~30 ...
+      pageBox[i] = this.dataLen.slice(0 + pageCount * (i - 1), i * pageCount);
+      // 顯示有幾頁
+      $("#allPage").append(
+        `<li class="page-item"><a class="page-link" href="#">${i}</a></li>`
+      );
+    }
+
+    /**
+     * 依顯示筆數渲染到表格
+     * @param {object[]} array
+     */
+    function page(array) {
+      $("#DataTable tbody").empty();
+      if (array && array.length) {
+        for (const item of array) {
+          $("#DataTable tbody").append(`
+        <tr>
+          <td><div class="th__item--show"><b>English Name</b></div>${item.name}</td>
+          <td><div class="th__item--show"><b>Email</b></div>${item.email}</td>
+          <td><div class="th__item--show"><b>Phone</b></div>${item.phone}</td>
+          <td><div class="th__item--show"><b>Date</b></div>${item.date}</td>
+          <td style="width:20%;" data-id="${item.id}">
+          <a class="btn btn-success edit-btn" id="edit${item.id}">Edit</a> | <a class="btn btn-danger delete-btn"  onclick="refetchItems.removeDataByID(${item.id})">Delete</a></td>
+        </tr>
+      `);
+          // onclick="refetchItems.openEditDialog(items[(${item.id}-1)])"
+          // edit 儲存用onclick="refetchItems.updateData(items[${item.id}])"
+        }
+      } else {
+        $("#DataTable tbody").append(`
+        <tr>
+          <td colspan="5">No Result</td>
+        </tr>
+    `);
+      }
+
+      $(".edit-btn").on('click',function(){
+        console.log("click edit");
+      })
+    }
+    // 頁數長度
+    let pageLen = pageBox.length - 1;
+
+    // 第一頁
+    $("#firstPage").on("click", function (e) {
+      e.preventDefault();
+      page(pageBox[1]);
+      $("#allPage li").removeClass("active");
+      $("#allPage li")
+        .eq((pageIndex = 0))
+        .addClass("active");
+    });
+
+    // 最後一頁
+    $("#lastPage").on("click", function (e) {
+      e.preventDefault();
+      pageIndex = pageLen;
+      page(pageBox[pageLen]);
+      $("#allPage li").removeClass("active");
+      $("#allPage li")
+        .eq(pageIndex - 1)
+        .addClass("active");
+    });
+    // 上一頁
+    $("#prev").on("click", function (e) {
+      e.preventDefault();
+      pageIndex--;
+      if (pageIndex >= 1) {
+        page(pageBox[pageIndex]);
+        $("#allPage li").removeClass("active");
+        $("#allPage li")
+          .eq(pageIndex - 1)
+          .addClass("active");
+      } else {
+        pageIndex = 1;
+      }
+    });
+    // 下一頁
+    $("#next").on("click", function (e) {
+      e.preventDefault();
+      pageIndex++;
+      if (pageIndex <= totalPage) {
+        page(pageBox[pageIndex]);
+        $("#allPage li").removeClass("active");
+        $("#allPage li")
+          .eq(pageIndex - 1)
+          .addClass("active");
+      } else {
+        pageIndex = totalPage;
+      }
+    });
+
+    // 點數字換頁
+    $("#allPage a").each(function (index) {
+      $(this).on("click", function (e) {
+        e.preventDefault();
+        pageIndex = index + 1;
+        page(pageBox[pageIndex]);
+        $(this).parent().siblings().removeClass("active");
+        $(this).parent().addClass("active");
+      });
+    });
+    // 開始顯示第一頁資料
+    page(pageBox[pageIndex]);
+    // 開始第一筆 active
+    $("#allPage li").eq(0).addClass("active");
+  }
+  //#endregion
 }
+
+const refetchItems = new TableCRUD($("#userTable>tbody"));
 
 // ====== Used ======
 $(function () {
-  refetchTable(items);
-  // 讓一開始只顯示5筆
-  showPages(items);
-
-  /**
-   * 顯示搜尋結果
-   * @param {string} value
-   * @param {object[]} arr
-   */
-  const showSearchResult = (value, arr = []) => {
-    $("#jsonResult")
-      .empty()
-      .html(
-        `<pre>${JSON.stringify(searchKeywords(value, arr), null, 1)}</pre>`
-      );
-
-    searchKeywords(value, arr);
-    // filterKeywords(value, arr);
-    // lodashFilterKeywords(value, arr);
-  };
-
   $("#searchTxt").on("keyup", function () {
     const _value = $(this).val();
-    // showSearchResult(_value, items);
-
     // 事件延遲0.5秒執行, 減少reflow
     setTimeout(() => {
       showSearchResult(_value, items);
-      // 過0.5秒後清空搜尋欄的值
     }, 500);
   });
-});
-
-// 分頁功能
-// 取得顯示資料筆數
-const ItemQuantity = document.getElementById("ItemQuantity");
-const searchTxt = document.getElementById("searchTxt");
-
-function showPages(dataLen) {
-  let data = null; // 容器:接收資料
-  let pageCount = ItemQuantity.value; // 每頁顯示幾筆資料
-  console.log(pageCount)
-  let pageBox = []; //容器，總筆數切成好幾批存放，每批是一組陣列 1~10，11~20，21~30，31~40 ....
-  let pageIndex = 1; // 第幾頁
-  let totalPage = 0; // 全部頁數
-  data = dataLen;
-
-  // 如果dataLen == undefined，讓他抓原本items的值
-  if (searchTxt.value == ''){
-  if (dataLen == undefined) {
-    data = items;
-  }}else{
-    console.log(searchTxt.value)
-    // showPages()
-  }
-  console.log(data);
-
-
-  totalPage = Math.ceil(data.length / pageCount);
-  $("#allPage").empty();
-  for (let i = 1; i <= totalPage; i++) {
-    // 將總筆數資料切成好幾批，使用二維陣列紀錄它，1~10，11~20，21~30 ...
-    pageBox[i] = data.slice(0 + pageCount * (i - 1), i * pageCount);
-    // 顯示有幾頁
-    $("#allPage").append(
-      `<li class="page-item"><a class="page-link" href="#">${i}</a></li>`
-    );
-  }
-  // 最末頁
-  const pageLen = pageBox.length - 1;
-  $("#lastPage").on("click", function (e) {
-    e.preventDefault();
-    page(pageBox[pageLen]);
-    $("#allPage li");
-    $("#allPage li").eq((pageIndex = pageLen - 1));
-  });
-  // 下一頁
-  $("#next").on("click", function (e) {
-    e.preventDefault();
-    pageIndex++;
-    if (pageIndex <= totalPage) {
-      page(pageBox[pageIndex]);
-      $("#allPage li");
-      $("#allPage li").eq(pageIndex - 1);
-    } else {
-      pageIndex = totalPage;
-    }
-  });
-  // 第一頁
-  $("#firstPage").on("click", function (e) {
-    e.preventDefault();
-    page(pageBox[1]);
-    $("#allPage li");
-    $("#allPage li").eq((pageIndex = 0));
-  });
-  // 上一頁
-  $("#prev").on("click", function (e) {
-    e.preventDefault();
-    pageIndex--;
-    if (pageIndex >= 1) {
-      page(pageBox[pageIndex]);
-      $("#allPage li");
-      $("#allPage li").eq(pageIndex - 1);
-    } else {
-      pageIndex = 1;
-    }
-  });
-
-  // 點數字換頁
-  $("#allPage a").each(function (index) {
-    $(this).on("click", function (e) {
-      e.preventDefault();
-      pageIndex = index + 1;
-      page(pageBox[pageIndex]);
-      $(this).parent().siblings();
-      $(this).parent();
-    });
-  });
-
-  // 開始顯示第一頁資料
-  page(pageBox[pageIndex]);
-  // 開始第一筆 active
-  $("#allPage li").eq(0);
-  //   }
+  // 一開始的items資料渲染畫面
+  refetchItems.refetchTable();
+  document.getElementById("addSubmit").onclick = function () {
+    refetchItems.validateForm();
+  };
+  document.getElementById("ItemQuantity").onclick = function () {
+    refetchItems.showPages();
+  };
+  // edit${item.id}
+  //   for (i = 0; i < items.length; i++) {
+  //   document.querySelector("edit" + i).onclick = function (){
+  //     // refetchItems.updateData(items[i-1]);
+  //     alert('123')
+  // }}
+  // for (i = 0; i < i.length; i++) {
+  // // const i = 2
+  // document.querySelector("#edit" + i).addEventListener('click', function(){
+  //   refetchItems.openEditDialog(items[i-1]);
   // })
-
-  function page(array) {
-    $("#DataTable tbody").html("");
-    for (const item of array) {
-      $("#DataTable tbody").append(`
-          <tr>
-            <td><div class="th__item--show"><b>English Name</b></div>${item.name}</td>
-            <td><div class="th__item--show"><b>Email</b></div>${item.email}</td>
-            <td><div class="th__item--show"><b>Phone</b></div>${item.phone}</td>
-            <td><div class="th__item--show"><b>Date</b></div>${item.date}</td>
-          </tr>
-        `);
-    }
-  }
-}
-// 宣告day是當下時間再加一天
-let day = dayjs().add(1, "day").format("YYYY-MM-DD");
-// 在#addDate中顯示當下時間
-$("#addDate").html(`<div>` + day + `</div>`);
-
-// 新增表單驗證
-$(document).ready(function () {
-  $(".inputform").focus(function () {
-    $(this).css("border-color", "#006cff");
-  });
-  $(".inputform").blur(function () {
-    $(this).css("border-color", "");
-  });
-
-  let flag1 = false;
-  let flag2 = false;
-  let flag3 = false;
-
-  let rule1 = /^.{1,}$/;
-  $("#name").blur(function () {
-    if (rule1.test($("#name").val())) {
-      $(".error1").text("");
-      $(this).css("border-color", "green");
-      flag1 = true;
-    } else {
-      $(".error1").text("此欄位必填");
-      $(this).css("border-color", "red");
-      flag1 = false;
-    }
-    let rule2 =
-      /^\w+((-\w+)|(\.\w+))*\@[A-Za-z0-9]+((\.|-)[A-Za-z0-9]+)*\.[A-Za-z]+$/;
-    $("#email").blur(function () {
-      if (rule2.test($(this).val())) {
-        $(".error2").text("");
-        $(this).css("border-color", "green");
-        flag2 = true;
-      } else {
-        $(".error2").text("email格式錯誤");
-        $(this).css("border-color", "red");
-        flag2 = false;
-      }
-    });
-    let rule3 = /^09\d{2}-\d{6}$/;
-    $("#phone").blur(function () {
-      if (rule3.test($(this).val())) {
-        $(".error3").text("");
-        $(this).css("border-color", "green");
-        flag3 = true;
-      } else {
-        $(".error3").text("手機號碼格式錯誤");
-        $(this).css("border-color", "red");
-        flag3 = false;
-      }
-      // 驗證都符合時 可以送出表單
-      if (flag1 && flag2 && flag3) {
-        // 把新增的值丟進表格
-        $(function () {
-          // 宣告點擊儲存新增次數(從一開始的陣列繼續往後上數字)用來取id名稱
-          let count = items.length + 1;
-
-          $("#addSubmit").click(function () {
-            // 每次儲存新增點擊就+1
-            count += 1;
-            items.push({
-              id: count,
-              name: $("#name").val(),
-              email: $("#email").val(),
-              phone: [$("#phone").val()],
-              date: day,
-            });
-            // 送出後欄位清空
-            $("#name").val("");
-            $("#email").val("");
-            $("#phone").val("");
-
-            return items[items.length - 1];
-          });
-        });
-      }
-    });
-  });
+  // }
+  // for (i = 0; i < i.length; i++) {
+  // document.querySelector("#edit"+i).onclick = function () {
+  //   // refetchItems.openEditDialog(items[i-1]);
+  //   alert('123')
+  // };}
 });
